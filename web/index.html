@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <base href="$FLUTTER_BASE_HREF">
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" content="Kompletacja pick slipów JLab – grupy Material ID, klasy S/M/B, wymiary i postęp.">
+
+  <!-- PWA / iOS -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Pick Slip">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+  <link rel="icon" type="image/png" href="favicon.png">
+  <meta name="theme-color" content="#1F3A5F">
+  <link rel="manifest" href="manifest.json">
+
+  <title>Pick Slip</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #F7F9FC; }
+    @media (prefers-color-scheme: dark) { html, body { background: #111418; } }
+    #splash { position: fixed; inset: 0; display: flex; align-items: center;
+      justify-content: center; font: 500 16px system-ui, sans-serif; color: #1F3A5F; }
+  </style>
+</head>
+<body>
+  <div id="splash">Ładowanie…</div>
+  <script>
+    // Własny service worker (offline). Flutterowy jest wyłączony w flutter_bootstrap.js.
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('sw.js');
+      });
+    }
+    window.addEventListener('flutter-first-frame', function () {
+      var s = document.getElementById('splash');
+      if (s) s.remove();
+    });
+  </script>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>
