@@ -241,6 +241,11 @@ Future<void> exportText(BuildContext context, String name, String content) async
   if (context.mounted) snack(context, 'Skopiowano CSV do schowka.');
 }
 
+Future<void> copyText(BuildContext context, String text) async {
+  await Clipboard.setData(ClipboardData(text: text));
+  if (context.mounted) snack(context, 'Skopiowano: $text');
+}
+
 void snack(BuildContext context, String msg) {
   ScaffoldMessenger.of(context)
     ..hideCurrentSnackBar()
@@ -543,6 +548,11 @@ class GroupCard extends StatelessWidget {
                         ],
                       ),
                     ),
+                    IconButton(
+                      tooltip: 'Kopiuj Material ID',
+                      icon: const Icon(Icons.copy, size: 20),
+                      onPressed: () => copyText(context, g.materialId),
+                    ),
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
@@ -729,7 +739,17 @@ Future<void> editProduct(BuildContext context, AppStore store, String? materialI
                 TextField(
                   controller: id,
                   readOnly: materialId != null,
-                  decoration: const InputDecoration(labelText: 'Material ID'),
+                  decoration: InputDecoration(
+                    labelText: 'Material ID',
+                    suffixIcon: IconButton(
+                      tooltip: 'Kopiuj Material ID',
+                      icon: const Icon(Icons.copy),
+                      onPressed: () {
+                        final v = id.text.trim();
+                        if (v.isNotEmpty) copyText(c, v);
+                      },
+                    ),
+                  ),
                   textCapitalization: TextCapitalization.characters,
                 ),
                 const SizedBox(height: 16),
