@@ -518,7 +518,7 @@ class GroupCard extends StatelessWidget {
             Material(
               color: groupColor(context, g.colorIndex),
               child: InkWell(
-                onTap: () => editProduct(context, store, g.materialId),
+                onTap: () => showProduct(context, store, g.materialId),
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(4, 8, 16, 8),
                   child: Row(children: [
@@ -541,7 +541,7 @@ class GroupCard extends StatelessWidget {
                             Text(p.nazwa, style: t.bodySmall),
                           Text(
                             details.isEmpty
-                                ? 'Brak wymiarów – dotknij, aby uzupełnić'
+                                ? 'Brak wymiarów w bazie'
                                 : details.join(' · '),
                             style: t.bodySmall?.copyWith(color: muted),
                           ),
@@ -641,11 +641,6 @@ class _ProductsPageState extends State<ProductsPage> {
       ..sort((a, b) => a.materialId.compareTo(b.materialId));
 
     return Scaffold(
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => editProduct(context, store, null),
-        icon: const Icon(Icons.add),
-        label: const Text('Dodaj produkt'),
-      ),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 820),
@@ -671,9 +666,13 @@ class _ProductsPageState extends State<ProductsPage> {
                     child: ListTile(
                       leading: const Icon(Icons.warning_amber),
                       title: Text(m, style: const TextStyle(fontFamily: 'monospace')),
-                      subtitle: const Text('Uzupełnij klasę, wymiary i wagę'),
-                      trailing: const Icon(Icons.edit),
-                      onTap: () => editProduct(context, store, m),
+                      subtitle: const Text('Brak w bazie – zaimportuj dane produktu'),
+                      trailing: IconButton(
+                        tooltip: 'Kopiuj Material ID',
+                        icon: const Icon(Icons.copy),
+                        onPressed: () => copyText(context, m),
+                      ),
+                      onTap: () => showProduct(context, store, m),
                     ),
                   ),
                 const SizedBox(height: 12),
@@ -705,7 +704,7 @@ class _ProductsPageState extends State<ProductsPage> {
                         ? const Tooltip(message: 'W bieżącym pick slipie',
                             child: Icon(Icons.assignment_turned_in_outlined))
                         : null,
-                    onTap: () => editProduct(context, store, p.materialId),
+                    onTap: () => showProduct(context, store, p.materialId),
                   ),
                 ),
             ],
@@ -716,90 +715,73 @@ class _ProductsPageState extends State<ProductsPage> {
   }
 }
 
-Future<void> editProduct(BuildContext context, AppStore store, String? materialId) async {
-  final existing = materialId == null ? null : store.products[materialId];
-  final id = TextEditingController(text: materialId ?? '');
-  final nazwa = TextEditingController(text: existing?.nazwa ?? '');
-  final wym = TextEditingController(text: existing?.wymiary ?? '');
-  final waga = TextEditingController(text: existing?.waga ?? '');
-  var klasa = existing?.klasa ?? '';
+/// Podgląd danych produktu – tylko do odczytu (bez edycji i usuwania).
+Future<void> showProduct(BuildContext context, AppStore store, String materialId) async {
+  final p = store.products[materialId];
+  final t = Theme.of(context).textTheme;
+  final muted = Theme.of(context).colorScheme.onSurfaceVariant;
 
-  final saved = await showDialog<bool>(
-    context: context,
-    builder: (c) => StatefulBuilder(
-      builder: (c, setS) => AlertDialog(
-        title: Text(materialId == null ? 'Nowy produkt' : 'Dane produktu'),
-        content: SizedBox(
-          width: 400,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                TextField(
-                  controller: id,
-                  readOnly: materialId != null,
-                  decoration: InputDecoration(
-                    labelText: 'Material ID',
-                    suffixIcon: IconButton(
-                      tooltip: 'Kopiuj Material ID',
-                      icon: const Icon(Icons.copy),
-                      onPressed: () {
-                        final v = id.text.trim();
-                        if (v.isNotEmpty) copyText(c, v);
-                      },
-                    ),
-                  ),
-                  textCapitalization: TextCapitalization.characters,
-                ),
-                const SizedBox(height: 16),
-                const Text('Klasa'),
-                const SizedBox(height: 6),
-                SegmentedButton<String>(
-                  segments: const [
-                    ButtonSegment(value: 'S', label: Text('S')),
-                    ButtonSegment(value: 'M', label: Text('M')),
-                    ButtonSegment(value: 'B', label: Text('B')),
-                  ],
-                  emptySelectionAllowed: true,
-                  selected: klasa.isEmpty ? <String>{} : {klasa},
-                  onSelectionChanged: (s) => setS(() => klasa = s.isEmpty ? '' : s.first),
-                ),
-                TextField(controller: nazwa,
-                    decoration: const InputDecoration(labelText: 'Nazwa (opcjonalnie)')),
-                TextField(controller: wym,
-                    decoration: const InputDecoration(
-                        labelText: 'Wymiary', hintText: 'np. 43,5x21,5x27 cm')),
-                TextField(controller: waga,
-                    decoration: const InputDecoration(
-                        labelText: 'Waga', hintText: 'np. 7,82 kg')),
-              ],
-            ),
-          ),
+  Widget row(String label, String value) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(width: 80, child: Text(label, style: t.bodyMedium?.copyWith(color: muted))),
+            Expanded(child: SelectableText(value.isEmpty ? '—' : value, style: t.bodyLarge)),
+          ],
         ),
-        actions: [
-          if (existing != null)
-            TextButton(
-              onPressed: () {
-                store.deleteProduct(existing.materialId);
-                Navigator.pop(c, false);
-              },
-              child: const Text('Usuń'),
-            ),
-          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Anuluj')),
-          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Zapisz')),
-        ],
+      );
+
+  await showDialog<void>(
+    context: context,
+    builder: (c) => AlertDialog(
+      title: const Text('Dane produktu'),
+      content: SizedBox(
+        width: 400,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Material ID', style: t.bodyMedium?.copyWith(color: muted)),
+            Row(children: [
+              Expanded(
+                child: SelectableText(materialId,
+                    style: t.titleMedium?.copyWith(
+                        fontFamily: 'monospace', fontWeight: FontWeight.w700)),
+              ),
+              IconButton(
+                tooltip: 'Kopiuj Material ID',
+                icon: const Icon(Icons.copy),
+                onPressed: () => copyText(c, materialId),
+              ),
+            ]),
+            const Divider(),
+            Row(children: [
+              SizedBox(width: 80, child: Text('Klasa', style: t.bodyMedium?.copyWith(color: muted))),
+              ClassBadge(p?.klasa ?? ''),
+            ]),
+            if (p != null && p.nazwa.isNotEmpty) row('Nazwa', p.nazwa),
+            row('Wymiary', p?.wymiary ?? ''),
+            row('Waga', p?.waga ?? ''),
+            if (p == null || p.isEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text('Brak danych w bazie – zaimportuj plik produktów.',
+                    style: t.bodySmall?.copyWith(color: muted)),
+              ),
+          ],
+        ),
       ),
+      actions: [
+        FilledButton(
+          onPressed: () {
+            Navigator.pop(c);
+            copyText(context, materialId);
+          },
+          child: const Text('Kopiuj i zamknij'),
+        ),
+        TextButton(onPressed: () => Navigator.pop(c), child: const Text('Zamknij')),
+      ],
     ),
   );
-
-  if (saved == true && id.text.trim().isNotEmpty) {
-    store.upsertProduct(Product(
-      materialId: id.text.trim().toUpperCase(),
-      klasa: klasa,
-      nazwa: nazwa.text.trim(),
-      wymiary: wym.text.trim(),
-      waga: waga.text.trim(),
-    ));
-  }
 }
