@@ -715,73 +715,167 @@ class _ProductsPageState extends State<ProductsPage> {
   }
 }
 
-/// Podgląd danych produktu – tylko do odczytu (bez edycji i usuwania).
+/// Okno produktu: dane (tylko do odczytu) + lokacje z tym produktem
+/// w bieżącym pick slipie, z ilością i polem „Zrobione”.
 Future<void> showProduct(BuildContext context, AppStore store, String materialId) async {
-  final p = store.products[materialId];
-  final t = Theme.of(context).textTheme;
-  final muted = Theme.of(context).colorScheme.onSurfaceVariant;
-
-  Widget row(String label, String value) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(width: 80, child: Text(label, style: t.bodyMedium?.copyWith(color: muted))),
-            Expanded(child: SelectableText(value.isEmpty ? '—' : value, style: t.bodyLarge)),
-          ],
-        ),
-      );
-
   await showDialog<void>(
     context: context,
-    builder: (c) => AlertDialog(
+    builder: (c) => ListenableBuilder(
+      listenable: store,
+      builder: (c, _) => _ProductDialog(store: store, materialId: materialId),
+    ),
+  );
+}
+
+class _ProductDialog extends StatelessWidget {
+  const _ProductDialog({required this.store, required this.materialId});
+  final AppStore store;
+  final String materialId;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = store.products[materialId];
+    final theme = Theme.of(context);
+    final t = theme.textTheme;
+    final muted = theme.colorScheme.onSurfaceVariant;
+
+    final lines = store.lines.where((l) => l.materialId == materialId).toList()
+      ..sort((a, b) => a.location.compareTo(b.location));
+    final total = lines.fold(0, (s, l) => s + l.quantity);
+    final left = lines.where((l) => !l.done).fold(0, (s, l) => s + l.quantity);
+    final allDone = lines.isNotEmpty && lines.every((l) => l.done);
+
+    Widget row(String label, String value) => Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(width: 80, child: Text(label, style: t.bodyMedium?.copyWith(color: muted))),
+              Expanded(child: SelectableText(value.isEmpty ? '—' : value, style: t.bodyLarge)),
+            ],
+          ),
+        );
+
+    return AlertDialog(
       title: const Text('Dane produktu'),
+      contentPadding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
       content: SizedBox(
-        width: 400,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Material ID', style: t.bodyMedium?.copyWith(color: muted)),
-            Row(children: [
-              Expanded(
-                child: SelectableText(materialId,
-                    style: t.titleMedium?.copyWith(
-                        fontFamily: 'monospace', fontWeight: FontWeight.w700)),
-              ),
-              IconButton(
-                tooltip: 'Kopiuj Material ID',
-                icon: const Icon(Icons.copy),
-                onPressed: () => copyText(c, materialId),
-              ),
-            ]),
-            const Divider(),
-            Row(children: [
-              SizedBox(width: 80, child: Text('Klasa', style: t.bodyMedium?.copyWith(color: muted))),
-              ClassBadge(p?.klasa ?? ''),
-            ]),
-            if (p != null && p.nazwa.isNotEmpty) row('Nazwa', p.nazwa),
-            row('Wymiary', p?.wymiary ?? ''),
-            row('Waga', p?.waga ?? ''),
-            if (p == null || p.isEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text('Brak danych w bazie – zaimportuj plik produktów.',
-                    style: t.bodySmall?.copyWith(color: muted)),
-              ),
-          ],
+        width: 420,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Material ID', style: t.bodyMedium?.copyWith(color: muted)),
+              Row(children: [
+                Expanded(
+                  child: SelectableText(materialId,
+                      style: t.titleMedium?.copyWith(
+                          fontFamily: 'monospace', fontWeight: FontWeight.w700)),
+                ),
+                IconButton(
+                  tooltip: 'Kopiuj Material ID',
+                  icon: const Icon(Icons.copy),
+                  onPressed: () => copyText(context, materialId),
+                ),
+              ]),
+              const Divider(),
+              Row(children: [
+                SizedBox(width: 80, child: Text('Klasa', style: t.bodyMedium?.copyWith(color: muted))),
+                ClassBadge(p?.klasa ?? ''),
+              ]),
+              const SizedBox(height: 4),
+              if (p != null && p.nazwa.isNotEmpty) row('Nazwa', p.nazwa),
+              row('Wymiary', p?.wymiary ?? ''),
+              row('Waga', p?.waga ?? ''),
+              if (p == null || p.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text('Brak danych w bazie – zaimportuj plik produktów.',
+                      style: t.bodySmall?.copyWith(color: muted)),
+                ),
+              const Divider(height: 24),
+              Row(children: [
+                Expanded(child: Text('Lokacje', style: t.titleSmall)),
+                if (lines.isNotEmpty)
+                  Text(allDone ? 'zrobione · $total szt.' : 'zostało $left z $total szt.',
+                      style: t.bodyMedium?.copyWith(color: muted)),
+              ]),
+              const SizedBox(height: 4),
+              if (lines.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Text('Tego produktu nie ma w bieżącym pick slipie.',
+                      style: t.bodyMedium?.copyWith(color: muted)),
+                )
+              else ...[
+                for (final l in lines) _DialogLineTile(store: store, line: l),
+                if (lines.length > 1)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: () {
+                        for (final l in lines) {
+                          l.done = !allDone;
+                        }
+                        // jedno zapisanie i odświeżenie
+                        store.toggleLine(lines.first, !allDone);
+                      },
+                      icon: Icon(allDone ? Icons.remove_done : Icons.done_all),
+                      label: Text(allDone ? 'Odznacz wszystkie' : 'Zaznacz wszystkie'),
+                    ),
+                  ),
+              ],
+            ],
+          ),
         ),
       ),
       actions: [
         FilledButton(
           onPressed: () {
-            Navigator.pop(c);
+            Navigator.pop(context);
             copyText(context, materialId);
           },
           child: const Text('Kopiuj i zamknij'),
         ),
-        TextButton(onPressed: () => Navigator.pop(c), child: const Text('Zamknij')),
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Zamknij')),
       ],
-    ),
-  );
+    );
+  }
+}
+
+class _DialogLineTile extends StatelessWidget {
+  const _DialogLineTile({required this.store, required this.line});
+  final AppStore store;
+  final PickLine line;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+    final deco = line.done ? TextDecoration.lineThrough : null;
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: () => store.toggleLine(line, !line.done),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 48),
+        child: Row(children: [
+          Checkbox(
+            value: line.done,
+            onChanged: (v) => store.toggleLine(line, v ?? false),
+          ),
+          Expanded(
+            child: Text(line.location,
+                style: t.titleMedium?.copyWith(
+                    fontFamily: 'monospace',
+                    fontWeight: FontWeight.w600,
+                    decoration: deco)),
+          ),
+          Text('${line.quantity} ${line.uom}',
+              style: t.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700, decoration: deco)),
+          const SizedBox(width: 4),
+        ]),
+      ),
+    );
+  }
 }
